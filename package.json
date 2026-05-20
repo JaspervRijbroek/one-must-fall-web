@@ -1,0 +1,16 @@
+{
+  "name": "one-must-fall-web",
+  "version": "0.1.0",
+  "description": "1-on-1 2D fighter inspired by One Must Fall 2097",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
+  },
+  "dependencies": {
+    "phaser": "^3.60.0"
+  }
+}
