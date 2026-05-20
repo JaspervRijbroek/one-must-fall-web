@@ -2,6 +2,24 @@
 
 One Must Fall Web is a 1-on-1 2D fighter inspired by One Must Fall 2097 and fully playable in the browser.
 
+## Getting Started
+
+```bash
+npm install
+npm run dev
+```
+
+Then open the URL printed by Vite (default: `http://localhost:5173`).
+
+## Controls (Quick Match — Player 1)
+
+| Action | Keys |
+|--------|------|
+| Move   | Arrow keys or A / D |
+| Jump   | Arrow Up, W, or Space |
+| Attack | Z or J |
+| Block  | Arrow Down or S (hold) |
+
 ## Main Menu
 
 The main menu contains 4 items:
