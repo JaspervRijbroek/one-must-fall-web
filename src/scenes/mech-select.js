@@ -1,96 +1,157 @@
+import Phaser from 'phaser';
 import { MECHS } from '../data/mechs.js';
+import { TITLE_STYLE, HEADING_STYLE, BUTTON_STYLE, SMALL_STYLE } from './ui-styles.js';
 
-export class MechSelectScene {
-  constructor(game, { mode } = {}) {
-    this.game = game;
-    this.mode = mode;
+const CARD_W = 100;
+const CARD_H = 120;
+const COLS = 5;
+const GAP = 12;
+
+export class MechSelectScene extends Phaser.Scene {
+  constructor() {
+    super({ key: 'MechSelect' });
+  }
+
+  init(data) {
+    this.mode = data.mode ?? 'quick-match';
     this.selectedId = null;
   }
 
-  render(container) {
-    const el = document.createElement('div');
-    el.className = 'screen';
-    el.innerHTML = `
-      <p class="screen-heading">Select Your Mech</p>
-      <div class="mech-grid" id="mech-grid" role="listbox" aria-label="Mech selection"></div>
-      <div>
-        <button class="btn" id="back-btn">◄ Back</button>
-        <button class="btn btn-primary" id="select-btn" disabled>Select ►</button>
-      </div>
-      <p class="controls-hint">Choose a mech to see its stats</p>
-    `;
-
-    const grid = el.querySelector('#mech-grid');
-    const selectBtn = el.querySelector('#select-btn');
-
+  preload() {
+    // Generate a coloured texture for each mech avatar
     MECHS.forEach((mech) => {
-      const card = document.createElement('div');
-      card.className = 'mech-card';
-      card.setAttribute('role', 'option');
-      card.setAttribute('tabindex', '0');
-      card.setAttribute('aria-selected', 'false');
-      card.dataset.id = mech.id;
-      card.innerHTML = `
-        ${this._mechAvatarSvg(mech)}
-        <div class="mech-name">${mech.name}</div>
-        <div class="mech-stat-row"><span>HP ${mech.hp}</span><span>DP ${mech.dp}</span></div>
-        <div class="mech-stat-row"><span>SPD ${mech.speed}</span><span>ATK ${mech.attack}</span></div>
-      `;
+      const key = `mech-avatar-${mech.id}`;
+      if (this.textures.exists(key)) return;
+      const gfx = this.make.graphics({ x: 0, y: 0, add: false });
+      this._drawMechShape(gfx, mech.color, 0, 0);
+      gfx.generateTexture(key, 58, 76);
+      gfx.destroy();
+    });
+  }
 
-      const pick = () => {
-        this.selectedId = mech.id;
-        grid.querySelectorAll('.mech-card').forEach((c) => {
-          c.classList.toggle('selected', c.dataset.id == mech.id);
-          c.setAttribute('aria-selected', c.dataset.id == mech.id ? 'true' : 'false');
-        });
-        selectBtn.disabled = false;
-      };
+  create() {
+    const { width } = this.scale;
+    const cx = width / 2;
 
-      card.addEventListener('click', pick);
-      card.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); }
+    this.add.text(cx, 28, 'ONE MUST FALL', { ...TITLE_STYLE, fontSize: '26px' }).setOrigin(0.5);
+    this.add.text(cx, 62, 'SELECT YOUR MECH', HEADING_STYLE).setOrigin(0.5);
+
+    // Grid layout
+    const totalW = COLS * CARD_W + (COLS - 1) * GAP;
+    const startX = (width - totalW) / 2 + CARD_W / 2;
+    const startY = 110;
+
+    this._cardBorders = [];
+    this._cardBgs = [];
+
+    MECHS.forEach((mech, i) => {
+      const col = i % COLS;
+      const row = Math.floor(i / COLS);
+      const x = startX + col * (CARD_W + GAP);
+      const y = startY + row * (CARD_H + GAP) + CARD_H / 2;
+      this._createMechCard(mech, x, y);
+    });
+
+    // Buttons
+    this._selectBtn = this._addButton(cx + 80, 416, 'SELECT  ►', true, () => this._onSelect());
+    this._selectBtn.setAlpha(0.35); // disabled until a mech is chosen
+    this._addButton(cx - 80, 416, '◄  BACK', true, () => this.scene.start('MainMenu'));
+
+    this.add.text(cx, 438, 'CLICK A MECH CARD TO CHOOSE', {
+      ...SMALL_STYLE, letterSpacing: 2,
+    }).setOrigin(0.5);
+  }
+
+  _createMechCard(mech, x, y) {
+    const border = this.add.rectangle(x, y, CARD_W, CARD_H).setStrokeStyle(1, 0x2a2a4a);
+    const bg = this.add.rectangle(x, y, CARD_W - 2, CARD_H - 2, 0x12121e)
+      .setInteractive({ useHandCursor: true });
+
+    this.add.image(x, y - 18, `mech-avatar-${mech.id}`).setDisplaySize(44, 58);
+
+    this.add.text(x, y + 32, mech.name.toUpperCase(), {
+      ...SMALL_STYLE, fontSize: '9px', letterSpacing: 1, color: '#ccd6f6',
+    }).setOrigin(0.5);
+
+    this.add.text(x - CARD_W / 2 + 4, y + 44, `HP ${mech.hp}  DP ${mech.dp}`, {
+      ...SMALL_STYLE, fontSize: '8px',
+    });
+    this.add.text(x - CARD_W / 2 + 4, y + 54, `SPD ${mech.speed}  ATK ${mech.attack}`, {
+      ...SMALL_STYLE, fontSize: '8px',
+    });
+
+    bg.on('pointerover', () => {
+      if (this.selectedId !== mech.id) border.setStrokeStyle(1, 0x00c8ff);
+    });
+    bg.on('pointerout', () => {
+      if (this.selectedId !== mech.id) border.setStrokeStyle(1, 0x2a2a4a);
+    });
+    bg.on('pointerup', () => {
+      this.selectedId = mech.id;
+      this._cardBorders.forEach((b, idx) => {
+        b.setStrokeStyle(1, idx === mech.id ? 0xffc84a : 0x2a2a4a);
+        this._cardBgs[idx].setFillColor(idx === mech.id ? 0x1f1f08 : 0x12121e);
       });
-
-      grid.appendChild(card);
+      this._selectBtn.setAlpha(1);
     });
 
-    el.querySelector('#back-btn').addEventListener('click', () => {
-      this.game.navigate('main-menu');
-    });
-
-    selectBtn.addEventListener('click', () => {
-      if (this.selectedId === null) return;
-      this.game.state.playerMech = MECHS[this.selectedId];
-      this.game.navigate('arena-select', { mode: this.mode });
-    });
-
-    container.appendChild(el);
+    this._cardBorders.push(border);
+    this._cardBgs.push(bg);
   }
 
-  /** Generates a simple inline SVG avatar for a mech using its colour. */
-  _mechAvatarSvg(mech) {
-    const c = mech.color;
-    return `
-      <svg class="mech-avatar" viewBox="0 0 60 80" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <!-- head -->
-        <rect x="20" y="4" width="20" height="16" rx="3" fill="${c}" />
-        <!-- visor -->
-        <rect x="23" y="9" width="14" height="5" rx="1" fill="#001824" opacity="0.9" />
-        <!-- body -->
-        <rect x="14" y="22" width="32" height="28" rx="2" fill="${c}" />
-        <!-- chest detail -->
-        <rect x="20" y="26" width="20" height="8" rx="1" fill="#ffffff18" />
-        <!-- left arm -->
-        <rect x="4"  y="22" width="9"  height="22" rx="2" fill="${c}" />
-        <!-- right arm -->
-        <rect x="47" y="22" width="9"  height="22" rx="2" fill="${c}" />
-        <!-- left leg -->
-        <rect x="14" y="52" width="13" height="24" rx="2" fill="${c}" />
-        <!-- right leg -->
-        <rect x="33" y="52" width="13" height="24" rx="2" fill="${c}" />
-      </svg>
-    `;
+  _onSelect() {
+    if (this.selectedId === null) return;
+    this.scene.start('ArenaSelect', { mode: this.mode, playerMech: MECHS[this.selectedId] });
   }
 
-  destroy() {}
+  _addButton(x, y, label, enabled, cb) {
+    const bw = 150;
+    const bh = 34;
+    this.add.rectangle(x, y, bw, bh).setStrokeStyle(1, 0x2a2a4a);
+    const bg  = this.add.rectangle(x, y, bw - 2, bh - 2, 0x12121e);
+    const txt = this.add.text(x, y, label, { ...BUTTON_STYLE, fontSize: '13px' }).setOrigin(0.5);
+
+    if (!enabled) return txt;
+
+    bg.setInteractive({ useHandCursor: true });
+    bg.on('pointerover',  () => { bg.setFillColor(0x2a2a4a); txt.setColor('#00c8ff'); });
+    bg.on('pointerout',   () => { bg.setFillColor(0x12121e); txt.setColor('#ccd6f6'); });
+    bg.on('pointerup', cb);
+    return txt;
+  }
+
+  /** Draws a simplified mech shape using Phaser Graphics at offset (ox, oy). */
+  _drawMechShape(gfx, hexColor, ox, oy) {
+    const c = Phaser.Display.Color.HexStringToColor(hexColor).color;
+    const dark = Phaser.Display.Color.ValueToColor(c);
+    dark.darken(40);
+
+    // Legs
+    gfx.fillStyle(dark.color);
+    gfx.fillRect(ox + 5,  oy + 54, 18, 22);
+    gfx.fillRect(ox + 35, oy + 54, 18, 22);
+
+    // Body
+    gfx.fillStyle(c);
+    gfx.fillRect(ox + 4, oy + 22, 50, 34);
+
+    // Chest detail
+    gfx.fillStyle(0xffffff, 0.1);
+    gfx.fillRect(ox + 10, oy + 28, 38, 10);
+
+    // Arms
+    gfx.fillStyle(dark.color);
+    gfx.fillRect(ox - 8,  oy + 22, 14, 24);
+    gfx.fillRect(ox + 52, oy + 22, 14, 24);
+
+    // Head
+    gfx.fillStyle(c);
+    gfx.fillRect(ox + 14, oy + 2, 30, 20);
+
+    // Visor
+    gfx.fillStyle(0x001824);
+    gfx.fillRect(ox + 18, oy + 8, 22, 8);
+    gfx.fillStyle(0x00c8ff, 0.6);
+    gfx.fillRect(ox + 18, oy + 8, 22, 8);
+  }
 }
